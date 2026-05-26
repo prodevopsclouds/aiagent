@@ -1,0 +1,63 @@
+name: AWS DevOps Agent Test Pipeline
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  workflow_dispatch: # Allows manual triggering from the GitHub UI
+
+jobs:
+  test-agent-capabilities:
+    name: Test AWS Agent & Failure Scenarios
+    # Instructs GitHub to run this job on your specific AWS agent
+    runs-on: your-aws-agent-label 
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Step 1: Check Agent Environment
+        run: |
+          echo "=== AGENT INFO ==="
+          echo "Host Name: $(hostname)"
+          echo "Operating System: $(uname -a)"
+          echo "Current User: $(whoami)"
+          echo "AWS CLI Version:"
+          aws --version || echo "AWS CLI not installed"
+
+      - name: Step 2: Simulate a Successful Task
+        run: |
+          echo "Pre-requisites look good. Preparing to test failure state..."
+          sleep 2
+
+      - name: Step 3: Intentionally Fail the Pipeline
+        id: fail_step
+        run: |
+          echo "ERROR: Simulating a critical failure on the AWS Agent!"
+          echo "This could represent a failed build, broken test, or AWS CLI credential issue."
+          # Exiting with any non-zero code triggers a GitHub Actions failure
+          exit 1 
+
+      - name: Step 4: This Should Be Skipped
+        run: |
+          echo "This step should NOT run because the previous step failed."
+
+  # This job will run only if the previous job fails, allowing you to test fallback capabilities
+  Handle-Failure:
+    name: Post-Failure Recovery & Logging
+    runs-on: your-aws-agent-label
+    needs: test-agent-capabilities
+    if: always() && (needs.test-agent-capabilities.result == 'failure')
+    
+    steps:
+      - name: Fetch and Upload AWS Agent Logs
+        run: |
+          echo "=== FAILURE DETECTED ==="
+          echo "Executing recovery steps on the AWS agent..."
+          echo "Dump last 10 lines of system syslog for debugging:"
+          tail -n 10 /var/log/syslog || echo "Could not read syslog"
+          
+      - name: Notify Team / Trigger AWS Alert
+        run: |
+          echo "Sending failure alert to AWS CloudWatch / SNS (Simulated)"
+          # If your agent has an IAM role attached, you could run:
+          # aws sns publish --topic-arn arn:aws:sns:region:account-id:topic --message "Pipeline Failed!"
